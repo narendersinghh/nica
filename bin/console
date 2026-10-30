@@ -1,0 +1,327 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+use App\Core\Migrator;
+use App\Core\Security\PasswordHasher;
+
+if (PHP_SAPI !== 'cli') {
+    exit(1);
+}
+
+$app = require dirname(__DIR__) . '/app/bootstrap.php';
+
+$args = array_slice($argv, 1);
+$command = array_shift($args) ?? 'help';
+
+/** --name=value options */
+$opt = static function (string $name, ?string $default = null) use ($args): ?string {
+    foreach ($args as $arg) {
+        if (str_starts_with($arg, "--{$name}=")) {
+            return substr($arg, strlen($name) + 3);
+        }
+    }
+    return $default;
+};
+
+$out = static fn (string $line = '') => fwrite(STDOUT, $line . PHP_EOL);
+$fail = static function (string $line) {
+    fwrite(STDERR, "\033[31m{$line}\033[0m" . PHP_EOL);
+    exit(1);
+};
+
+$migrator = static fn () => new Migrator($app->db(), $app->path('database/migrations'));
+
+switch ($command) {
+    case 'serve':
+        $host = $opt('host', '127.0.0.1');
+        $port = $opt('port', '8080');
+        $out("NiCa running at http://{$host}:{$port}  (Ctrl+C to stop)");
+        // PHP 8.1's multi-worker dev server truncates some responses, so one worker by default.
+        $workers = (int) $opt('workers', '1');
+        if ($workers > 1) {
+            putenv('PHP_CLI_SERVER_WORKERS=' . $workers);
+        }
+        passthru(sprintf('%s -S %s:%s -t %s %s',
+            escapeshellarg(PHP_BINARY), escapeshellarg($host), escapeshellarg($port),
+            escapeshellarg($app->path('public')), escapeshellarg($app->path('public/index.php'))));
+        break;
+
+    case 'migrate':
+        $ran = $migrator()->migrate();
+        $out($ran ? 'Migrated: ' . implode(', ', $ran) : 'Nothing to migrate.');
+        break;
+
+    case 'migrate:rollback':
+        $rolled = $migrator()->rollback();
+        $out($rolled ? 'Rolled back: ' . implode(', ', $rolled) : 'Nothing to roll back.');
+        break;
+
+    case 'migrate:status':
+        foreach ($migrator()->status() as $name => $ran) {
+            $out(($ran ? "\033[32m[x]\033[0m " : '[ ] ') . $name);
+        }
+        break;
+
+    case 'make:migration':
+        $name = preg_replace('/[^a-z0-9_]/', '_', strtolower($args[0] ?? ''));
+        if ($name === '') {
+            $fail('Usage: php bin/console make:migration create_products_table');
+        }
+        $file = $app->path('database/migrations/' . date('Y_m_d_His') . "_{$name}.php");
+        file_put_contents($file, "<?php\n\nuse App\\Core\\Database;\n\nreturn [\n    'up' => function (Database \$db): void {\n    },\n\n    'down' => function (Database \$db): void {\n    },\n];\n");
+        $out('Created ' . $file);
+        break;
+
+    case 'key:generate':
+        $env = $app->path('.env');
+        if (!is_file($env)) {
+            $fail('.env not found. Copy .env.example to .env first.');
+        }
+        $contents = (string) file_get_contents($env);
+        if (preg_match('/^APP_KEY=\S+/m', $contents) && !in_array('--force', $args, true)) {
+            $fail('APP_KEY is already set. Use --force to replace it (this logs everyone out).');
+        }
+        $key = bin2hex(random_bytes(32));
+        $contents = preg_match('/^APP_KEY=.*$/m', $contents)
+            ? preg_replace('/^APP_KEY=.*$/m', 'APP_KEY=' . $key, $contents)
+            : $contents . PHP_EOL . 'APP_KEY=' . $key . PHP_EOL;
+        file_put_contents($env, $contents);
+        $out('APP_KEY generated.');
+        break;
+
+    case 'user:create':
+        $email = strtolower(trim((string) $opt('email')));
+        $role = (string) $opt('role', 'customer');
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $fail('Usage: php bin/console user:create --email=you@example.com --role=admin [--first=Name --last=Name]');
+        }
+        if (!in_array($role, ['admin', 'staff', 'vendor', 'vendor_staff', 'stylist', 'customer'], true)) {
+            $fail("Unknown role '{$role}'.");
+        }
+        fwrite(STDOUT, 'Password (hidden): ');
+        shell_exec('stty -echo 2>/dev/null');
+        $password = trim((string) fgets(STDIN));
+        shell_exec('stty echo 2>/dev/null');
+        $out();
+        $min = (int) config('security.password.min_length', 10);
+        if (str_length($password) < $min) {
+            $fail("Password must be at least {$min} characters.");
+        }
+        $db = $app->db();
+        $db->transaction(function () use ($db, $email, $password, $role, $opt) {
+            $id = (int) $db->scalar('SELECT id FROM users WHERE email = ?', [$email]);
+            if ($id === 0) {
+                $first = (string) $opt('first', '');
+                $last = (string) $opt('last', '');
+                $id = $db->insert('users', [
+                    'email' => $email,
+                    'password_hash' => PasswordHasher::hash($password),
+                    'first_name' => $first,
+                    'last_name' => $last,
+                    'display_name' => trim("{$first} {$last}") ?: strstr($email, '@', true),
+                    'email_verified_at' => gmdate('Y-m-d H:i:s'),
+                ]);
+            } else {
+                $db->update('users', ['password_hash' => PasswordHasher::hash($password)], ['id' => $id]);
+            }
+            $db->query('INSERT IGNORE INTO user_roles (user_id, role) VALUES (?, ?)', [$id, $role]);
+        });
+        $out("User {$email} saved with role {$role}.");
+        break;
+
+    case 'cache:clear':
+        $count = 0;
+        $it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($app->path('storage/cache'), FilesystemIterator::SKIP_DOTS), RecursiveIteratorIterator::CHILD_FIRST);
+        foreach ($it as $file) {
+            if ($file->getFilename() === '.gitkeep') {
+                continue;
+            }
+            $file->isDir() ? @rmdir($file->getPathname()) : (@unlink($file->getPathname()) && $count++);
+        }
+        $out("Cleared {$count} cached files.");
+        break;
+
+    case 'import:wp':
+        // Reads the WordPress copy (WP_DB_DATABASE); media files are fetched from the old site with GET only.
+        // The WordPress copy may live in another database with its own user (as on Hostinger).
+        $wpDb = new App\Core\Database(array_merge((array) config('database'), array_filter([
+            'host' => App\Core\Env::get('WP_DB_HOST'),
+            'port' => App\Core\Env::get('WP_DB_PORT'),
+            'username' => App\Core\Env::get('WP_DB_USERNAME'),
+            'password' => App\Core\Env::get('WP_DB_PASSWORD'),
+        ], static fn ($v) => $v !== null && $v !== ''), [
+            'database' => (string) App\Core\Env::get('WP_DB_DATABASE', 'nica_wp'),
+            'collation' => 'utf8mb4_unicode_520_ci',
+        ]));
+        $source = new App\Services\Import\WordPressSource($wpDb, (string) App\Core\Env::get('WP_DB_PREFIX', 'wp_'));
+        $contentSteps = ['media', 'categories', 'posts', 'pages', 'faqs', 'redirects'];
+        $catalogSteps = ['users', 'vendors', 'taxonomies', 'products', 'reviews', 'quiz', 'coupons', 'orders', 'balances'];
+        $only = $opt('only') ? explode(',', (string) $opt('only')) : array_merge($contentSteps, $catalogSteps);
+        $importer = new App\Services\Import\WordPressImporter(
+            $source,
+            $app->db(),
+            $app->path('public/uploads'),
+            $app->path('database/content/pages'),
+            $out,
+        );
+        $out('Source: ' . $source->siteUrl() . ' (read-only)');
+        $importer->run(array_values(array_intersect($contentSteps, $only)), !in_array('--no-download', $args, true));
+        (new App\Services\Import\CatalogImporter($source, $app->db(), $importer, $app->path('database/content'), $out))
+            ->run(array_values(array_intersect($catalogSteps, $only)));
+        App\Services\Cache\PageCache::flush();
+        $out("\nDone.");
+        break;
+
+    case 'doctor':
+        // Pre-flight check for a server (run after uploading and editing .env). Exit code 1 on any FAIL.
+        $results = ['PASS' => 0, 'WARN' => 0, 'FAIL' => 0];
+        // $detail is always shown; $fix only when the check does not pass.
+        $check = static function (string $status, string $label, string $detail = '', string $fix = '') use ($out, &$results): void {
+            $results[$status]++;
+            $color = ['PASS' => '32', 'WARN' => '33', 'FAIL' => '31'][$status];
+            $note = $status === 'PASS' ? $detail : trim($detail . ($detail !== '' && $fix !== '' ? ' — ' : '') . $fix);
+            $out("\033[{$color}m{$status}\033[0m  {$label}" . ($note !== '' ? "  ({$note})" : ''));
+        };
+        $env = static fn (string $k, string $d = '') => (string) App\Core\Env::get($k, $d);
+        $production = $app->isProduction();
+
+        $out('PHP and extensions');
+        $check(version_compare(PHP_VERSION, '8.1.0', '>=') ? 'PASS' : 'FAIL', 'PHP ' . PHP_VERSION, '', 'needs 8.1 or newer');
+        foreach (['pdo_mysql', 'sodium', 'gd', 'mbstring', 'intl', 'curl', 'dom', 'fileinfo', 'zlib', 'openssl', 'json'] as $ext) {
+            $check(extension_loaded($ext) ? 'PASS' : (in_array($ext, ['intl'], true) ? 'WARN' : 'FAIL'), "extension {$ext}");
+        }
+        if (function_exists('gd_info')) {
+            $check(!empty(gd_info()['WebP Support']) ? 'PASS' : 'FAIL', 'GD can write WebP (image uploads)');
+        }
+        $check(extension_loaded('Zend OPcache') ? 'PASS' : 'WARN', 'OPcache installed', '', 'enable it in hPanel → PHP Configuration for speed');
+        $check((int) ini_get('upload_max_filesize') >= 10 || str_ends_with((string) ini_get('upload_max_filesize'), 'G') ? 'PASS' : 'WARN', 'upload_max_filesize ' . ini_get('upload_max_filesize'), '', 'set 16M in hPanel → PHP Configuration (product images up to 10 MB)');
+
+        $out("\nConfiguration (.env)");
+        $check(strlen($env('APP_KEY')) >= 32 ? 'PASS' : 'FAIL', 'APP_KEY set', '', 'php bin/console key:generate');
+        $check($production ? 'PASS' : 'WARN', 'APP_ENV=' . $env('APP_ENV'), '', 'must be production on the live site');
+        $check(!$production || !$app->debug() ? 'PASS' : 'FAIL', 'APP_DEBUG off in production');
+        $hosts = array_filter(array_map('trim', explode(',', $env('TRUSTED_HOSTS'))));
+        $check($hosts && !in_array('*', $hosts, true) ? 'PASS' : ($production ? 'FAIL' : 'WARN'), 'TRUSTED_HOSTS=' . implode(',', $hosts), '', 'list the real domain(s), e.g. thenicacollection.com,www.thenicacollection.com');
+        $secret = $env('STRIPE_SECRET_KEY');
+        $public = $env('STRIPE_PUBLISHABLE_KEY');
+        if ($secret === '' || $public === '') {
+            $check($production ? 'FAIL' : 'WARN', 'Stripe keys', '', 'not set: checkout is disabled');
+        } else {
+            $live = str_contains($secret, '_live_');
+            $check($live === str_contains($public, '_live_') ? 'PASS' : 'FAIL', 'Stripe keys are a matching pair', $live ? 'live mode' : 'test mode');
+            $check(!$production || $live ? 'PASS' : 'WARN', 'Stripe live keys in production');
+            $check(str_starts_with($env('STRIPE_WEBHOOK_SECRET'), 'whsec_') ? 'PASS' : 'FAIL', 'STRIPE_WEBHOOK_SECRET', '', 'Stripe dashboard → Webhooks → endpoint https://<domain>/webhooks/stripe');
+        }
+        $mail = $env('MAIL_DRIVER', 'log');
+        $check($mail === 'smtp' && $env('MAIL_HOST') !== '' && $env('MAIL_FROM_ADDRESS') !== '' ? 'PASS' : ($production ? 'FAIL' : 'WARN'), 'email: MAIL_DRIVER=' . $mail, '', 'production needs smtp + MAIL_HOST + MAIL_FROM_ADDRESS');
+        $envFile = $app->path('.env');
+        $check(is_file($envFile) && (fileperms($envFile) & 0o004) === 0 ? 'PASS' : 'WARN', '.env not world-readable', '', 'chmod 600 .env');
+
+        $out("\nDatabase");
+        try {
+            $db = $app->db();
+            $version = (string) $db->scalar('SELECT VERSION()');
+            $check('PASS', 'connected', $version);
+            $json = $db->scalar("SELECT JSON_UNQUOTE(JSON_EXTRACT('{\"a\":{\"b\":\"ok\"}}', '$.a.b'))");
+            $check($json === 'ok' ? 'PASS' : 'FAIL', 'JSON functions work', stripos($version, 'mariadb') !== false ? 'MariaDB' : 'MySQL');
+            $pending = array_filter($migrator()->status(), static fn (bool $ran) => !$ran);
+            $check(!$pending ? 'PASS' : 'FAIL', 'migrations up to date', '', count($pending) . ' pending: php bin/console migrate');
+            $collation = (string) $db->scalar('SELECT DEFAULT_COLLATION_NAME FROM information_schema.SCHEMATA WHERE SCHEMA_NAME = DATABASE()');
+            $check(str_starts_with($collation, 'utf8mb4') ? 'PASS' : 'WARN', 'database charset', $collation);
+            if (!$pending) {
+                $check((int) $db->scalar("SELECT COUNT(*) FROM user_roles WHERE role = 'admin'") > 0 ? 'PASS' : 'FAIL', 'an admin account exists', '', 'php bin/console user:create --email=... --role=admin');
+                $check((int) $db->scalar("SELECT COUNT(*) FROM products WHERE status = 'published'") > 0 ? 'PASS' : 'WARN', 'catalog imported', '', 'php bin/console import:wp');
+            }
+        } catch (Throwable $e) {
+            $check('FAIL', 'database connection', $e->getMessage());
+        }
+
+        $out("\nFiles");
+        foreach (['storage/cache', 'storage/logs', 'storage/sessions', 'storage/mail', 'public/uploads', 'public/assets/build'] as $dir) {
+            $path = $app->path($dir);
+            $check(is_dir($path) && is_writable($path) ? 'PASS' : 'FAIL', "{$dir} writable");
+        }
+        $check(is_file($app->path('public/.htaccess')) && is_file($app->path('public/uploads/.htaccess')) ? 'PASS' : 'FAIL', '.htaccess files present', '', 'upload public/.htaccess and public/uploads/.htaccess');
+        $beat = $app->path('storage/cache/queue-heartbeat');
+        $check(is_file($beat) && filemtime($beat) > time() - 600 ? 'PASS' : ($production ? 'FAIL' : 'WARN'), 'cron runs queue:work', is_file($beat) ? 'last run ' . gmdate('Y-m-d H:i', filemtime($beat)) . ' UTC' : 'never run', 'add "* * * * * php ' . $app->path('bin/console') . ' queue:work" in hPanel → Cron jobs');
+
+        $out(sprintf("\n%d passed, %d warnings, %d failed", $results['PASS'], $results['WARN'], $results['FAIL']));
+        exit($results['FAIL'] > 0 ? 1 : 0);
+
+    case 'release':
+        // Zip for uploading to the server. Never includes secrets, the WordPress dump,
+        // local tooling, runtime data or (unless --with-uploads) the media library.
+        if (!class_exists(ZipArchive::class)) {
+            $fail('The zip extension is required.');
+        }
+        $withUploads = in_array('--with-uploads', $args, true);
+        $root = $app->path();
+        $skip = [
+            '#^\.env$#', '#^\.devenv/#', '#^[^/]+\.sql$#', '#^storage/release/#', '#(^|/)\.git/#',
+            '#^storage/(cache|logs|sessions|mail|private)/(?!\.gitkeep$)#', '#^public/assets/build/(?!\.gitkeep$)#',
+            '#^tests/#', '#(^|/)node_modules/#', '#\.(log|tmp|swp)$#',
+        ];
+        if (!$withUploads) {
+            $skip[] = '#^public/uploads/(?!\.htaccess$|\.gitkeep$)#';
+        }
+        @mkdir($root . '/storage/release', 0775, true);
+        $file = $root . '/storage/release/nica-' . gmdate('Ymd-His') . ($withUploads ? '-with-uploads' : '') . '.zip';
+        $zip = new ZipArchive();
+        if ($zip->open($file, ZipArchive::CREATE | ZipArchive::EXCL) !== true) {
+            $fail("Cannot create {$file}");
+        }
+        $count = 0;
+        $it = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS));
+        foreach ($it as $f) {
+            $rel = str_replace('\\', '/', substr($f->getPathname(), strlen($root) + 1));
+            foreach ($skip as $pattern) {
+                if (preg_match($pattern, $rel)) {
+                    continue 2;
+                }
+            }
+            $zip->addFile($f->getPathname(), $rel);
+            $count++;
+        }
+        $zip->close();
+        $out(sprintf('Built %s (%d files, %.1f MB).', $file, $count, filesize($file) / 1048576));
+        $out('Contains no .env, no database dump, no logs or sessions' . ($withUploads ? '.' : ' and no media (copy public/uploads separately, or use --with-uploads).'));
+        break;
+
+    case 'queue:work':
+        // Run from cron every minute: * * * * * php /path/bin/console queue:work
+        [$sent, $failed] = (new App\Services\Mail\Mailer())->work((int) $opt('limit', '50'));
+        $pruned = $app->limiter()->prune();
+        $cancelled = (new App\Services\Orders\OrderService($app->db()))->cancelAbandoned();
+        // Guest carts untouched for 30 days are removed.
+        $carts = $app->db()->query('DELETE FROM carts WHERE user_id IS NULL AND updated_at < (UTC_TIMESTAMP() - INTERVAL 30 DAY)')->rowCount();
+        $pages = App\Services\Cache\PageCache::sweep();
+        @touch($app->path('storage/cache/queue-heartbeat')); // checked by "doctor"
+        $out("Emails sent: {$sent}, failed: {$failed}. Unpaid orders cancelled: {$cancelled}. Old carts removed: {$carts}. Rate-limit rows removed: {$pruned}. Expired cached pages removed: {$pages}.");
+        break;
+
+    case 'routes':
+        foreach ($app->router()->routes() as $route) {
+            $out(sprintf('%-10s %-40s %s', implode('|', array_diff($route->methods, ['HEAD'])), $route->pattern, $route->name ?? ''));
+        }
+        break;
+
+    default:
+        $out('NiCa console');
+        $out();
+        $out('  serve [--host=127.0.0.1 --port=8080]  Run the local development server');
+        $out('  migrate                               Run pending migrations');
+        $out('  migrate:rollback                      Roll back the last batch');
+        $out('  migrate:status                        List migrations');
+        $out('  make:migration <name>                 Create a migration file');
+        $out('  key:generate [--force]                Generate APP_KEY in .env');
+        $out('  user:create --email= --role=          Create a user (or reset password / add role)');
+        $out('  import:wp [--only=media,posts,users,vendors,products,...] [--no-download]');
+        $out('                                        Import content from the WordPress copy');
+        $out('  queue:work [--limit=50]               Send queued emails (run from cron)');
+        $out('  cache:clear                           Empty storage/cache');
+        $out('  doctor                                Check the server is ready (PHP, .env, database, files, cron)');
+        $out('  release                               Build a deployable zip in storage/release/');
+        $out('  routes                                List routes');
+}

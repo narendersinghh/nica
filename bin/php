@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+# Runs the system PHP with the extensions unpacked in .devenv/ (curl, mbstring, gd, intl, zip).
+# Only needed on this machine because they could not be installed system-wide without sudo.
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+export PHP_INI_SCAN_DIR=":$ROOT/.devenv/conf.d"
+export LD_LIBRARY_PATH="$ROOT/.devenv/root/usr/lib/x86_64-linux-gnu${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+exec /usr/bin/php "$@"

@@ -1,0 +1,15 @@
+/.env
+/storage/cache/*
+/storage/logs/*
+/storage/sessions/*
+/storage/mail/*
+/storage/private/*
+/public/uploads/*
+!/storage/**/.gitkeep
+!/public/uploads/.htaccess
+!/public/uploads/.gitkeep
+/.devenv/
+/*.sql
+/public/assets/build/*
+!/public/assets/build/.gitkeep
+/storage/release/

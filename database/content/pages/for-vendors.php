@@ -1,0 +1,35 @@
+<?php
+
+return ['blocks' => [
+    ['type' => 'banner', 'eyebrow' => 'Become NiCa Premier Partner', 'icon' => 'shield',
+        'text' => 'Sell premium hair extensions & wigs on a platform designed to boost your brand.'],
+    ['type' => 'partner_program',
+        'title' => 'NiCa Premiere Partners',
+        'lead' => 'Lifetime Status | Limited Access | Elevated Visibility',
+        'text' => 'The first 50 vendors to join The NiCa Collection will be invited into our NiCa Premier Partners program. This status is permanent for as long as you remain a member of the platform.',
+        'list_title' => 'Premiere Partners receive:',
+        'list' => ['Lifetime partner status', 'A special NiCa Premiere medallion/tag displayed on their storefront', 'Elevated visibility across the platform', 'Early access to new features, tools, and opportunities', 'Recognition as a founding brand within the NiCa ecosystem'],
+        'why_title' => 'Why join early',
+        'why' => ['$0 upfront costs', 'No public platform fees listed', 'All commercial terms handled privately through inquiry and conversation', 'Focus stays on brand quality, not pricing pressure'],
+        'card' => [
+            'title' => 'Founding Vendor Program',
+            'price' => '$0',
+            'price_label' => 'Monthly Subscription',
+            'text' => 'Lock in lifetime commission-only access when you join early',
+            'button' => ['label' => 'Become a Vendor', 'url' => '/my-account/?register=vendor'],
+        ],
+        'reasons_title' => 'Why Vendors Choose The NiCa Collection',
+        'reasons' => [
+            ['icon' => 'target', 'title' => 'Premium visibility', 'text' => 'Reach customers already searching for high-quality hair extensions and wigs'],
+            ['icon' => 'zero', 'title' => 'Zero upfront fees', 'text' => 'No monthly subscription, just commission on sales'],
+            ['icon' => 'card', 'title' => 'Secure vendor payments', 'text' => 'Use secure payment processing system that easily links with tools currently used'],
+            ['icon' => 'bag', 'title' => 'Smart product matching', 'text' => 'Help buyers find their perfect match through AI recognition tools and patterns - type, length, color, texture, etc'],
+            ['icon' => 'check-square', 'title' => 'Quality verification support', 'text' => 'Maintain trust with our multi-step quality and vendor-review process'],
+            ['icon' => 'users', 'title' => 'Community & connection', 'text' => 'Join a platform where beauty vendors connect, collaborate and grow - together'],
+            ['icon' => 'chart', 'title' => 'Grow with analytics (Day N)', 'text' => 'Vendor dashboards and performance insights as NiCa expands'],
+            ['icon' => 'gift', 'title' => 'Preferred partner status', 'text' => 'Tiered programs available , Easy Verification and Setup , 24/7 support , Feature of the week or month'],
+            ['icon' => 'id', 'title' => 'Easy verification and setup', 'text' => 'Share your brand and product details so we can ensure quality and alignment.'],
+        ],
+        'pills' => ['100+ Vendors Interested', 'Premium Hair-Only Marketplace', 'Built for Extensions & Wigs'],
+    ],
+]];

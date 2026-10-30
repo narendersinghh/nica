@@ -1,0 +1,29 @@
+# Only used when the whole project sits inside public_html (Hostinger without a
+# custom document root). Every request is served from public/; nothing else
+# (app code, .env, storage, the database dump) is ever reachable from the web.
+# With the recommended setup (public_html -> public/), this file is never read.
+
+Options -Indexes -MultiViews
+ServerSignature Off
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+
+    # Old links to /public/... go to the clean URL (no duplicate addresses).
+    RewriteCond %{THE_REQUEST} \s/public/([^\s?]*) [NC]
+    RewriteRule ^ /%1 [R=301,L,NE]
+
+    # Everything else is looked up inside public/.
+    RewriteCond %{REQUEST_URI} !^/public/
+    RewriteRule ^(.*)$ public/$1 [L]
+</IfModule>
+
+# Without mod_rewrite, refuse to serve anything from the project root.
+<IfModule !mod_rewrite.c>
+    Require all denied
+</IfModule>
+
+# Defense in depth (this also applies inside public/, so only types the site never serves).
+<FilesMatch "^\.|\.(sql|env|log|md|lock|bak|tmp|cache)$">
+    Require all denied
+</FilesMatch>
