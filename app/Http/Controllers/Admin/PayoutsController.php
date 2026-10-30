@@ -37,7 +37,7 @@ final class PayoutsController extends AdminController
         $balances = $db->select(
             "SELECT v.id, v.store_name, v.payout_method, v.stripe_charges_enabled, COALESCE(SUM(l.amount_cents), 0) AS available
              FROM vendors v JOIN vendor_ledger l ON l.vendor_id = v.id AND l.available_at <= UTC_TIMESTAMP()
-             GROUP BY v.id HAVING available <> 0 ORDER BY available DESC"
+             GROUP BY v.id, v.store_name, v.payout_method, v.stripe_charges_enabled HAVING available <> 0 ORDER BY available DESC"
         );
         return $this->panel($request, 'admin/payouts', ['title' => 'Payouts', 'tab' => 'payouts', 'rows' => $rows, 'status' => $status, 'balances' => $balances]);
     }

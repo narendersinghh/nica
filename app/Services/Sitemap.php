@@ -65,7 +65,7 @@ final class Sitemap
 
             case 'category':
                 return array_map(static fn ($r) => ['loc' => $abs('/category/' . $r['slug'] . '/'), 'lastmod' => $date($r['lastmod'])],
-                    $this->db->select("SELECT c.slug, MAX(p.updated_at) lastmod FROM post_categories c JOIN post_category pc ON pc.category_id = c.id JOIN posts p ON p.id = pc.post_id AND p.status = 'published' GROUP BY c.id ORDER BY c.slug"));
+                    $this->db->select("SELECT c.slug, MAX(p.updated_at) lastmod FROM post_categories c JOIN post_category pc ON pc.category_id = c.id JOIN posts p ON p.id = pc.post_id AND p.status = 'published' GROUP BY c.id, c.slug ORDER BY c.slug"));
 
             case 'product_cat':
                 // Only categories that have something to show (a category page counts its sub-categories' products).
@@ -74,12 +74,12 @@ final class Sitemap
                         'SELECT c.path, MAX(p.updated_at) lastmod FROM product_categories c
                          JOIN product_categories d ON d.id = c.id OR d.path LIKE CONCAT(c.path, "/%")
                          JOIN product_category pc ON pc.category_id = d.id JOIN products p ON p.id = pc.product_id JOIN vendors v ON v.id = p.vendor_id
-                         WHERE ' . self::VISIBLE . ' GROUP BY c.id ORDER BY c.path'
+                         WHERE ' . self::VISIBLE . ' GROUP BY c.id, c.path ORDER BY c.path'
                     ));
 
             case 'store':
                 return array_map(static fn ($r) => ['loc' => $abs('/store/' . $r['slug'] . '/'), 'lastmod' => $date($r['lastmod'])],
-                    $this->db->select('SELECT v.slug, GREATEST(v.updated_at, COALESCE(MAX(p.updated_at), v.updated_at)) lastmod FROM vendors v LEFT JOIN products p ON p.vendor_id = v.id AND p.status = "published" WHERE v.status = "approved" GROUP BY v.id ORDER BY v.store_name'));
+                    $this->db->select('SELECT v.slug, GREATEST(v.updated_at, COALESCE(MAX(p.updated_at), v.updated_at)) lastmod FROM vendors v LEFT JOIN products p ON p.vendor_id = v.id AND p.status = "published" WHERE v.status = "approved" GROUP BY v.id, v.slug, v.updated_at, v.store_name ORDER BY v.store_name'));
         }
         throw new \InvalidArgumentException("Unknown sitemap type {$type}");
     }

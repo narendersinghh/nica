@@ -60,10 +60,10 @@ final class Post
     public static function related(array $post, int $limit = 3): array
     {
         $posts = app()->db()->select(
-            self::LISTING . " JOIN post_category pc ON pc.post_id = p.id
-             WHERE p.status = 'published' AND p.published_at <= UTC_TIMESTAMP() AND p.id <> ?
-               AND pc.category_id IN (SELECT category_id FROM post_category WHERE post_id = ?)
-             GROUP BY p.id ORDER BY p.published_at DESC LIMIT " . $limit,
+            // EXISTS rather than JOIN + GROUP BY: MariaDB (Hostinger) rejects grouping by p.id while selecting other columns.
+            self::LISTING . " WHERE p.status = 'published' AND p.published_at <= UTC_TIMESTAMP() AND p.id <> ?
+               AND EXISTS (SELECT 1 FROM post_category pc WHERE pc.post_id = p.id AND pc.category_id IN (SELECT category_id FROM post_category WHERE post_id = ?))
+             ORDER BY p.published_at DESC LIMIT " . $limit,
             [$post['id'], $post['id']],
         );
         if (count($posts) < $limit) {

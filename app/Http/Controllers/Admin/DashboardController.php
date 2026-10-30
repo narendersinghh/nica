@@ -54,7 +54,7 @@ final class DashboardController extends AdminController
                 "SELECT v.id, v.store_name, SUM(vo.subtotal_cents - vo.discount_cents) sales, COUNT(*) orders
                  FROM vendor_orders vo JOIN vendors v ON v.id = vo.vendor_id
                  WHERE vo.status IN ('processing','on-hold','shipped','completed') AND vo.created_at >= UTC_TIMESTAMP() - INTERVAL 90 DAY
-                 GROUP BY v.id ORDER BY sales DESC LIMIT 5"
+                 GROUP BY v.id, v.store_name ORDER BY sales DESC LIMIT 5"
             ),
             'lowStock' => (int) $db->scalar("SELECT COUNT(*) FROM product_variants v JOIN products p ON p.id = v.product_id WHERE p.status = 'published' AND v.is_active = 1 AND v.manage_stock = 1 AND v.stock_qty <= 3"),
             'needs2fa' => !$this->app->auth()->user()['two_factor_enabled_at'],
