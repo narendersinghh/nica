@@ -36,8 +36,11 @@ final class Session
         ini_set('session.use_strict_mode', '1');
         ini_set('session.use_only_cookies', '1');
         ini_set('session.use_trans_sid', '0');
-        ini_set('session.sid_length', '48');
-        ini_set('session.sid_bits_per_character', '6');
+        if (PHP_VERSION_ID < 80400) {
+            // PHP 8.4+ already uses long random ids by default (and deprecates these settings).
+            ini_set('session.sid_length', '48');
+            ini_set('session.sid_bits_per_character', '6');
+        }
         ini_set('session.gc_maxlifetime', (string) (((int) $this->config['idle_minutes']) * 60));
         session_save_path($this->savePath);
         session_name((string) $this->config['name']);
