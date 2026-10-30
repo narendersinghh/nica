@@ -14,9 +14,19 @@ final class Env
 
     public static function load(string $file): void
     {
-        if (!is_file($file)) {
-            return;
+        foreach (self::read($file) as $key => $value) {
+            self::$vars[$key] = $value;
         }
+    }
+
+    /** Parse a .env file without loading it (used by the setup wizard's tests). */
+    public static function read(string $file): array
+    {
+        if (!is_file($file)) {
+            return [];
+        }
+        $saved = self::$vars;
+        $values = [];
         foreach (file($file, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
             $line = trim($line);
             if ($line === '' || $line[0] === '#' || !str_contains($line, '=')) {
@@ -26,8 +36,11 @@ final class Env
             if (!preg_match('/^[A-Z][A-Z0-9_]*$/', $key)) {
                 continue;
             }
-            self::$vars[$key] = self::parse($value);
+            // ${VAR} references resolve against earlier lines of the same file.
+            $values[$key] = self::$vars[$key] = self::parse($value);
         }
+        self::$vars = $saved; // reading never changes the loaded settings; load() applies them
+        return $values;
     }
 
     public static function get(string $key, mixed $default = null): mixed

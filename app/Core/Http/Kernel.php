@@ -14,6 +14,7 @@ use App\Http\Middleware\ReferralCapture;
 use App\Http\Middleware\RememberLogin;
 use App\Http\Middleware\RequireRole;
 use App\Http\Middleware\SecurityHeaders;
+use App\Http\Middleware\SetupOnly;
 use App\Http\Middleware\Throttle;
 use App\Http\Middleware\VendorAccess;
 use App\Http\Middleware\TrustedHost;
@@ -40,6 +41,7 @@ final class Kernel
         'vendor' => VendorAccess::class,
         'admin' => AdminAccess::class,
         'cache' => PageCacheMiddleware::class,
+        'setup' => SetupOnly::class,
     ];
 
     public function __construct(private App $app)
@@ -51,6 +53,10 @@ final class Kernel
         // An update is being installed: everyone but the updater itself waits a moment.
         if (($maintenance = $this->maintenance($request)) !== null) {
             return SecurityHeaders::apply($this->app, $maintenance);
+        }
+        // Fresh upload: everything goes to the setup wizard until it is finished.
+        if (!$this->app->isInstalled() && !preg_match('#^/?install(/|$)#', $request->path())) {
+            return SecurityHeaders::apply($this->app, Response::redirect($request->basePath() . '/install/', 302)->header('Cache-Control', 'no-store'));
         }
         try {
             $response = $this->pipeline(

@@ -144,33 +144,10 @@ switch ($command) {
         break;
 
     case 'import:wp':
-        // Reads the WordPress copy (WP_DB_DATABASE); media files are fetched from the old site with GET only.
-        // The WordPress copy may live in another database with its own user (as on Hostinger).
-        $wpDb = new App\Core\Database(array_merge((array) config('database'), array_filter([
-            'host' => App\Core\Env::get('WP_DB_HOST'),
-            'port' => App\Core\Env::get('WP_DB_PORT'),
-            'username' => App\Core\Env::get('WP_DB_USERNAME'),
-            'password' => App\Core\Env::get('WP_DB_PASSWORD'),
-        ], static fn ($v) => $v !== null && $v !== ''), [
-            'database' => (string) App\Core\Env::get('WP_DB_DATABASE', 'nica_wp'),
-            'collation' => 'utf8mb4_unicode_520_ci',
-        ]));
-        $source = new App\Services\Import\WordPressSource($wpDb, (string) App\Core\Env::get('WP_DB_PREFIX', 'wp_'));
-        $contentSteps = ['media', 'categories', 'posts', 'pages', 'faqs', 'redirects'];
-        $catalogSteps = ['users', 'vendors', 'taxonomies', 'products', 'reviews', 'quiz', 'coupons', 'orders', 'balances'];
-        $only = $opt('only') ? explode(',', (string) $opt('only')) : array_merge($contentSteps, $catalogSteps);
-        $importer = new App\Services\Import\WordPressImporter(
-            $source,
-            $app->db(),
-            $app->path('public/uploads'),
-            $app->path('database/content/pages'),
-            $out,
-        );
-        $out('Source: ' . $source->siteUrl() . ' (read-only)');
-        $importer->run(array_values(array_intersect($contentSteps, $only)), !in_array('--no-download', $args, true));
-        (new App\Services\Import\CatalogImporter($source, $app->db(), $importer, $app->path('database/content'), $out))
-            ->run(array_values(array_intersect($catalogSteps, $only)));
-        App\Services\Cache\PageCache::flush();
+        // Reads the copy of the WordPress database (WP_DB_*); media files are fetched from the old site with GET only.
+        $steps = $opt('only') ? explode(',', (string) $opt('only')) : array_merge(App\Services\Import\ImportRunner::CONTENT_STEPS, App\Services\Import\ImportRunner::CATALOG_STEPS);
+        $out('Source: ' . App\Services\Import\ImportRunner::source()->siteUrl() . ' (read-only)');
+        App\Services\Import\ImportRunner::run($steps, !in_array('--no-download', $args, true), $out);
         $out("\nDone.");
         break;
 
@@ -262,7 +239,8 @@ switch ($command) {
         $root = $app->path();
         $skip = [
             '#^\.env$#', '#^\.devenv/#', '#^[^/]+\.sql$#', '#^storage/release/#', '#(^|/)\.git/#',
-            '#^storage/(cache|logs|sessions|mail|private)/(?!\.gitkeep$)#', '#^public/assets/build/(?!\.gitkeep$)#',
+            '#^storage/(cache|logs|sessions|mail|private|updates)/(?!\.gitkeep$)#', '#^public/assets/build/(?!\.gitkeep$)#',
+            '#^storage/(installed|setup-code\.txt|maintenance)$#',
             '#^tests/#', '#(^|/)node_modules/#', '#\.(log|tmp|swp)$#',
         ];
         if (!$withUploads) {

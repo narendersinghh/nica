@@ -109,6 +109,8 @@ No domain is hard-coded. Every absolute URL is built from the request's Host hea
 
 ## Going live
 
+On a fresh upload, open `/install/` in the browser: a setup wizard (unlocked with the code in `storage/setup-code.txt`) checks the server, saves the database and site settings to `.env`, creates the tables, can import from WordPress, creates the first admin and then switches itself off.
+
 The full step-by-step guide for Hostinger (staging rehearsal, cut-over, one-command rollback) is in **[DEPLOY.md](DEPLOY.md)**. Two helper commands:
 
 ```bash

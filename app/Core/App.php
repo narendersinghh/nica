@@ -104,6 +104,14 @@ final class App
         return $this->router;
     }
 
+    private ?bool $installed = null;
+
+    /** False until the /install/ wizard (or an existing setup) has been completed. */
+    public function isInstalled(): bool
+    {
+        return $this->installed ??= (new \App\Services\Install\Installer($this->basePath))->isInstalled();
+    }
+
     public function url(): Url
     {
         return $this->url ??= new Url(
@@ -111,7 +119,8 @@ final class App
             (array) $this->config->get('app.trusted_hosts', []),
             (array) $this->config->get('app.trusted_proxies', []),
             (string) $this->config->get('app.force_scheme', ''),
-            $this->isLocal(),
+            // Before setup the domain is not configured yet; the wizard itself sets TRUSTED_HOSTS.
+            $this->isLocal() || !$this->isInstalled(),
             $this->path('public'),
         );
     }

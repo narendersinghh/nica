@@ -216,6 +216,37 @@
         });
     }
 
+    /* ---------------------------------------------------------- setup wizard: WordPress import, one step per request */
+    var importForm = $('[data-import-form]');
+    if (importForm) {
+        importForm.addEventListener('submit', function (e) {
+            e.preventDefault();
+            var btn = $('[data-import-start]', importForm);
+            btn.disabled = true;
+            btn.textContent = 'Importing… keep this page open';
+            var token = $('input[name="_token"]', importForm).value;
+            var items = $$('[data-import-step]');
+            var next = function (i) {
+                if (i >= items.length) { window.location.href = window.location.pathname; return; }
+                var li = items[i];
+                li.className = 'is-running';
+                $('.setup__mark', li).textContent = '…';
+                var body = new URLSearchParams(); body.append('_token', token);
+                fetch(importForm.action + li.getAttribute('data-import-step'), { method: 'POST', body: body, credentials: 'same-origin', headers: { Accept: 'application/json' } })
+                    .then(function (r) { return r.json().then(function (d) { return [r.ok, d]; }); })
+                    .then(function (res) {
+                        var ok = res[0] && res[1].ok;
+                        li.className = ok ? 'is-pass' : 'is-fail';
+                        $('.setup__mark', li).textContent = ok ? '✓' : '✕';
+                        $('[data-import-note]', li).textContent = ok ? (res[1].summary || '') : (res[1].error || 'failed');
+                        if (ok) next(i + 1); else { btn.disabled = false; btn.textContent = 'Try again'; }
+                    })
+                    .catch(function () { li.className = 'is-fail'; btn.disabled = false; btn.textContent = 'Try again'; });
+            };
+            next(0);
+        });
+    }
+
     /* ---------------------------------------------------------- unsaved changes */
     var dirty = false;
     function markDirty() { dirty = true; }

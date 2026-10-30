@@ -21,6 +21,7 @@ use App\Http\Controllers\BlogController;
 use App\Http\Controllers\CartController;
 use App\Http\Controllers\CheckoutController;
 use App\Http\Controllers\ContactController;
+use App\Http\Controllers\InstallController;
 use App\Http\Controllers\LegacyController;
 use App\Http\Controllers\MatchController;
 use App\Http\Controllers\PageController;
@@ -37,6 +38,21 @@ use App\Http\Controllers\Vendor\OrderController as VendorOrders;
 use App\Http\Controllers\Vendor\ProductController as VendorProducts;
 use App\Http\Controllers\Vendor\ReviewController as VendorReviews;
 use App\Http\Controllers\Vendor\SettingsController as VendorSettings;
+
+// First-time setup wizard (404 once the site is installed).
+$router->group(['prefix' => '/install', 'middleware' => ['setup']], function ($router) {
+    $router->get('', [InstallController::class, 'show']);
+    $router->post('/unlock', [InstallController::class, 'unlock'])->withoutTrailingSlash();
+    $router->post('/check', [InstallController::class, 'check'])->withoutTrailingSlash();
+    $router->post('/database', [InstallController::class, 'database'])->withoutTrailingSlash();
+    $router->post('/site', [InstallController::class, 'site'])->withoutTrailingSlash();
+    $router->post('/tables', [InstallController::class, 'tables'])->withoutTrailingSlash();
+    $router->post('/import/config', [InstallController::class, 'importConfig'])->withoutTrailingSlash();
+    $router->post('/import/run/{step:[a-z_]+}', [InstallController::class, 'importStep'])->withoutTrailingSlash();
+    $router->post('/import/skip', [InstallController::class, 'importSkip'])->withoutTrailingSlash();
+    $router->post('/admin', [InstallController::class, 'admin'])->withoutTrailingSlash();
+    $router->post('/finish', [InstallController::class, 'finish'])->withoutTrailingSlash();
+});
 
 // Public site. URLs mirror the current WordPress site exactly (trailing slashes included).
 $router->get('/', [PageController::class, 'home'])->name('home')->middleware('cache');

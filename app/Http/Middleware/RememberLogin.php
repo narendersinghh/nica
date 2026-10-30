@@ -15,7 +15,7 @@ final class RememberLogin implements Middleware
     public function handle(Request $request, \Closure $next, array $args = []): Response
     {
         $cookie = (string) $request->cookie(Auth::REMEMBER_COOKIE, '');
-        if ($cookie === '' || app()->auth()->check()) {
+        if ($cookie === '' || !app()->isInstalled() || app()->auth()->check()) {
             return $next($request);
         }
         $auth = app()->auth();

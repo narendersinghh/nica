@@ -50,7 +50,22 @@ ln -s ~/nica/public public_html
 
 **Option B (no SSH).** Extract the zip directly into `public_html`. The project's root `.htaccess` sends every request into `public/` and blocks everything else. In this case, move WordPress's files into a backup folder first.
 
-## 4. Configure `.env`
+## 4. Run the setup wizard (recommended)
+
+Open **`https://<your-domain>/install/`** (every page sends you there until setup is done). The wizard:
+
+1. asks for a one-time **setup code**: open `storage/setup-code.txt` in hPanel → File Manager and paste it (this stops anyone else from setting up your site);
+2. checks PHP, extensions and folder permissions;
+3. tests your **database** login and saves it (if you already imported your database, its tables and data are kept);
+4. saves the **domain**, live/staging mode, and optionally **email (SMTP)** and **Stripe** keys;
+5. creates any missing **tables**;
+6. optionally **imports from a WordPress copy** (one step at a time, so no time-outs) — skipped automatically when the database already has products;
+7. creates the first **admin account** (or keeps the admins your database already has);
+8. **Finish**: the wizard switches itself off (it returns "not found" from then on) and lists what is left: the cron job, the Stripe webhook and two-factor login.
+
+It writes `.env` for you (with a fresh `APP_KEY`, permissions 600). If PHP cannot write it, the wizard shows the exact contents to paste into a new `.env` file. Steps 5 and 6 below are the same thing done by hand over SSH; skip them if you used the wizard.
+
+## 5. Configure `.env` by hand (instead of the wizard)
 
 ```bash
 cd ~/nica
@@ -71,9 +86,9 @@ Edit `.env`:
 | `WP_DB_DATABASE`, `WP_DB_USERNAME`, `WP_DB_PASSWORD` | the WordPress **copy** |
 | `MAIL_DRIVER=smtp`, `MAIL_HOST=smtp.hostinger.com`, `MAIL_PORT=465`, `MAIL_ENCRYPTION=ssl`, `MAIL_USERNAME`/`MAIL_PASSWORD`, `MAIL_FROM_ADDRESS` | the sending mailbox |
 | `STRIPE_PUBLISHABLE_KEY`, `STRIPE_SECRET_KEY` | test keys on staging, live keys on production |
-| `STRIPE_WEBHOOK_SECRET` | from step 7 |
+| `STRIPE_WEBHOOK_SECRET` | from step 8 |
 
-## 5. Database tables and content
+## 6. Database tables and content (by hand)
 
 ```bash
 php bin/console migrate
@@ -89,7 +104,7 @@ Imported admin accounts keep their WordPress passwords. Each admin must turn on 
 php bin/console user:create --email=you@example.com --role=admin
 ```
 
-## 6. Cron (hPanel → Advanced → Cron Jobs)
+## 7. Cron (hPanel → Advanced → Cron Jobs)
 
 Every minute:
 
@@ -99,7 +114,7 @@ php /home/u123456789/nica/bin/console queue:work
 
 This sends the email queue, cancels abandoned unpaid orders, removes old carts and expired cached pages.
 
-## 7. Stripe
+## 8. Stripe
 
 1. **Developers → Webhooks → Add endpoint**: `https://<domain>/webhooks/stripe`.
    Events: `payment_intent.succeeded`, `payment_intent.payment_failed`, `account.updated`.
@@ -107,7 +122,7 @@ This sends the email queue, cancels abandoned unpaid orders, removes old carts a
 2. **Connect → Settings**: enable Express accounts, and set the branding and the return URL domain to your domain. Vendors then connect from Dashboard → Payout Settings.
 3. Payment methods: card and Link, as on the old site (Settings → Payment methods).
 
-## 8. Check everything
+## 9. Check everything
 
 ```bash
 php bin/console doctor
@@ -122,9 +137,9 @@ Every line should say **PASS** (warnings are fine on staging). Then click throug
 - [ ] Stylist: apply, approve in admin, open `/?ref=CODE`, order, and see the commission.
 - [ ] Old URLs: `/wp-content/uploads/...` images, `/?p=<old post id>`, a renamed product slug.
 
-Then clear the test data before going live (step 9 starts from a fresh database).
+Then clear the test data before going live (step 10 starts from a fresh database).
 
-## 9. Go-live day (about 30 minutes)
+## 10. Go-live day (about 30 minutes)
 
 1. Put a notice on the WordPress site (or pause checkout) so no new orders arrive during the switch.
 2. Export the WordPress database again and import it into the WordPress-copy database (replace the old copy).
@@ -143,7 +158,7 @@ Then clear the test data before going live (step 9 starts from a fresh database)
 6. Visit the site, place one real low-value order, then refund it from Admin → Orders.
 7. Google Search Console: submit `https://thenicacollection.com/sitemap_index.xml`.
 
-## 10. Rollback (seconds)
+## 11. Rollback (seconds)
 
 The WordPress files and database are untouched, so going back is one command:
 
@@ -154,7 +169,7 @@ rm public_html && mv public_html_wordpress public_html
 
 Orders placed on the new site during the attempt are kept in its database (Admin → Orders), so nothing is lost.
 
-## 11. After launch
+## 12. After launch
 
 - Look at **Admin → Redirects & 404s** daily for the first week, and redirect any old address people still use.
 - **Admin → Dashboard** shows orders on hold, payouts and applications waiting.

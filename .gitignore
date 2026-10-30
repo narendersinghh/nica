@@ -15,3 +15,5 @@
 /storage/release/
 /storage/updates/
 /storage/maintenance
+/storage/installed
+/storage/setup-code.txt
