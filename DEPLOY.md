@@ -20,7 +20,7 @@ Paths below use `u123456789` as the Hostinger account name: replace it with your
 - Extensions: `pdo_mysql`, `sodium`, `gd`, `mbstring`, `intl`, `curl`, `dom`, `fileinfo`, `zip`, `opcache` (usually on by default).
 - Options: `upload_max_filesize = 16M`, `post_max_size = 64M`, `memory_limit = 256M`, `max_execution_time = 120`.
 
-Over SSH, check that `php -v` shows the same version. If it doesn't, call PHP with its full path, e.g. `/opt/alt/php83/usr/bin/php`, and use that path for cron too.
+Over SSH, the plain `php` command may be a **different version** from the website (on this account: `php` is 8.2 without `sodium`, the site runs 8.5). Always call the version the site uses by its full path, e.g. `/opt/alt/php85/usr/bin/php bin/console doctor`, and use the same path in the cron job.
 
 ## 2. Databases (hPanel → Databases → MySQL Databases)
 
@@ -106,10 +106,10 @@ php bin/console user:create --email=you@example.com --role=admin
 
 ## 7. Cron (hPanel → Advanced → Cron Jobs)
 
-Every minute:
+Every minute (Hostinger has no `crontab` command over SSH; cron jobs are added in hPanel only). Use the PHP path that matches the site's version:
 
 ```
-php /home/u123456789/nica/bin/console queue:work
+/opt/alt/php85/usr/bin/php /home/u123456789/nica/bin/console queue:work
 ```
 
 This sends the email queue, cancels abandoned unpaid orders, removes old carts and expired cached pages.
