@@ -43,5 +43,6 @@ return [
         'coupon' => [15, 600],   // slows down coupon-code guessing
         'checkout' => [20, 600],
         'payout' => [10, 3600],
+        'updates' => [10, 3600],
     ],
 ];

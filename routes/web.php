@@ -13,6 +13,7 @@ use App\Http\Controllers\Admin\RedirectsController as AdminRedirects;
 use App\Http\Controllers\Admin\ReviewsController as AdminReviews;
 use App\Http\Controllers\Admin\SettingsController as AdminSettings;
 use App\Http\Controllers\Admin\StylistsController as AdminStylists;
+use App\Http\Controllers\Admin\UpdatesController as AdminUpdates;
 use App\Http\Controllers\Admin\VendorsController as AdminVendors;
 use App\Http\Controllers\AccountController;
 use App\Http\Controllers\AuthController;
@@ -206,6 +207,10 @@ $router->group(['prefix' => '/admin', 'middleware' => ['admin']], function ($rou
     $router->post('/redirects/dismiss', [AdminRedirects::class, 'dismiss'])->withoutTrailingSlash()->middleware('admin:seo');
     $router->get('/settings', [AdminSettings::class, 'index'])->middleware('admin:settings');
     $router->post('/settings', [AdminSettings::class, 'save'])->middleware('admin:settings');
+    $router->get('/updates', [AdminUpdates::class, 'index'])->middleware('admin:updates');
+    $router->post('/updates/install', [AdminUpdates::class, 'install'])->middleware('admin:updates', 'throttle:updates');
+    $router->post('/updates/finish', [AdminUpdates::class, 'finish'])->middleware('admin:updates');
+    $router->post('/updates/rollback', [AdminUpdates::class, 'rollback'])->middleware('admin:updates', 'throttle:updates');
     $router->get('/audit', [AdminAudit::class, 'index'])->middleware('admin:audit');
     $router->get('/audit/page/{page:\d+}', [AdminAudit::class, 'index'])->middleware('admin:audit');
 });

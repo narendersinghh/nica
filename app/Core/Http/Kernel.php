@@ -48,6 +48,10 @@ final class Kernel
 
     public function handle(Request $request): Response
     {
+        // An update is being installed: everyone but the updater itself waits a moment.
+        if (($maintenance = $this->maintenance($request)) !== null) {
+            return SecurityHeaders::apply($this->app, $maintenance);
+        }
         try {
             $response = $this->pipeline(
                 array_map(static fn (string $class) => [$class, []], self::GLOBAL),
@@ -145,5 +149,24 @@ final class Kernel
     {
         $qs = $request->queryString();
         return Response::redirect($this->app->url()->to($path) . ($qs !== '' ? '?' . $qs : ''), 301);
+    }
+
+    private function maintenance(Request $request): ?Response
+    {
+        $flag = $this->app->path('storage/maintenance');
+        clearstatcache(true, $flag);
+        if (!is_file($flag)) {
+            return null;
+        }
+        // Never stay down for long by accident: a stale flag (> 15 min) is ignored.
+        if (filemtime($flag) < time() - 900 || preg_match('#^/?admin/updates(/|$)#', $request->path())) {
+            return null;
+        }
+        $css = 'body{margin:0;min-height:100vh;display:grid;place-items:center;background:#2C211C;color:#f3ece4;font:16px/1.5 system-ui,sans-serif;text-align:center}'
+            . 'h1{font-weight:400;font-family:Georgia,serif;font-size:34px;margin:0 0 8px}p{margin:0;opacity:.8}';
+        $html = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
+            . '<meta name="robots" content="noindex"><title>Back in a moment</title><style nonce="' . e($this->app->cspNonce()) . '">' . $css . '</style></head>'
+            . '<body><div><h1>We\'ll be right back</h1><p>' . e((string) config('app.name')) . ' is being updated. This takes less than a minute.</p></div></body></html>';
+        return Response::html($html, 503)->header('Retry-After', '60')->header('Cache-Control', 'no-store');
     }
 }

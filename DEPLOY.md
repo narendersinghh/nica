@@ -160,7 +160,34 @@ Orders placed on the new site during the attempt are kept in its database (Admin
 - **Admin → Dashboard** shows orders on hold, payouts and applications waiting.
 - Errors are logged in `~/nica/storage/logs/`.
 - Backups: Hostinger's daily backups cover files and databases. Also download a database export before big changes.
-- Updating the code later: build a new release, upload and extract it over `~/nica` (`.env`, `storage/` and `public/uploads/` are not in the zip), then run `php bin/console migrate` and `php bin/console cache:clear`.
+- Updating the code later: see "Updates" below.
+
+## Updates (Admin → Updates)
+
+New versions come straight from the GitHub repository. On **Admin → Updates** you see the installed version, the latest **release** and the latest **commit** on `main`, with the list of changes in between. One click:
+
+1. downloads that exact version from GitHub,
+2. saves a backup of the current code (the last 3 are kept in `storage/updates/`),
+3. shows visitors a short "back in a moment" page while the files are swapped (usually seconds; it switches itself off after 15 minutes at most),
+4. applies database changes (migrations) and refreshes the caches.
+
+`.env`, `storage/`, uploaded images, all data, and the PHP-version lines Hostinger writes into `.htaccess` are never changed. **Roll back** restores the previous code with one click.
+
+To ship a version: push to `main` (installable as "latest commit"), or better, create a **release** on GitHub (Releases → Draft a new release → tag e.g. `v1.1.0`) and install that on the live site.
+
+From SSH, the same actions:
+
+```bash
+php bin/console update                      # what's installed vs. available
+php bin/console update:install --release    # or --commit
+php bin/console update:rollback             # if a new version breaks the admin panel
+```
+
+Notes:
+
+- Web updates work on sites installed from the **zip** (step 3). A `git clone` checkout is refused on purpose; use `git pull` there.
+- A private repository needs `UPDATE_GITHUB_TOKEN` in `.env` (a fine-grained token with read-only "Contents" access). Public repositories need nothing.
+- Only admins can update, and every install and rollback is recorded in the audit log.
 
 ## Security notes
 

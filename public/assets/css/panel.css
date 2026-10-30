@@ -368,3 +368,6 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 1
 .tiers-table { margin: 6px 0 8px; }
 .tiers-table td, .tiers-table th { padding: 6px 8px; }
 .tiers-table .input { padding: 7px 9px; border: 1px solid var(--line-strong); border-radius: 6px; width: 100%; }
+.release-notes { max-height: 220px; overflow: auto; padding: 10px 12px; margin-bottom: 12px; background: var(--grey-soft); border-radius: var(--radius-sm); }
+.commit-list li { align-items: flex-start; }
+.commit-list span { min-width: 0; }

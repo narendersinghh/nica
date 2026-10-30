@@ -244,6 +244,8 @@ switch ($command) {
             $check(is_dir($path) && is_writable($path) ? 'PASS' : 'FAIL', "{$dir} writable");
         }
         $check(is_file($app->path('public/.htaccess')) && is_file($app->path('public/uploads/.htaccess')) ? 'PASS' : 'FAIL', '.htaccess files present', '', 'upload public/.htaccess and public/uploads/.htaccess');
+        $updateProblems = (new App\Services\Updater\Updater($app->path()))->preflight();
+        $check(!$updateProblems ? 'PASS' : 'WARN', 'Admin → Updates can install new versions', '', $updateProblems[0] ?? '');
         $beat = $app->path('storage/cache/queue-heartbeat');
         $check(is_file($beat) && filemtime($beat) > time() - 600 ? 'PASS' : ($production ? 'FAIL' : 'WARN'), 'cron runs queue:work', is_file($beat) ? 'last run ' . gmdate('Y-m-d H:i', filemtime($beat)) . ' UTC' : 'never run', 'add "* * * * * php ' . $app->path('bin/console') . ' queue:work" in hPanel → Cron jobs');
 
@@ -289,6 +291,86 @@ switch ($command) {
         $out('Contains no .env, no database dump, no logs or sessions' . ($withUploads ? '.' : ' and no media (copy public/uploads separately, or use --with-uploads).'));
         break;
 
+    case 'update':
+    case 'update:install':
+    case 'update:finish':
+    case 'update:rollback':
+        // Same as Admin → Updates, for SSH (and for recovery when the admin panel is down).
+        $updater = new App\Services\Updater\Updater($app->path());
+        $finish = static function () use ($updater, $app, $migrator, $out): void {
+            $ran = $updater->finish(static fn () => $migrator()->migrate(), static function () use ($app): void {
+                App\Services\Cache\PageCache::flush();
+                array_map('unlink', glob($app->path('public/assets/build') . '/*.min.*') ?: []);
+                @unlink($app->path('storage/cache/updates-check.json'));
+            });
+            $out('Finished: ' . ($updater->installed()['ref'] ?? 'new version') . ($ran ? ' (' . count($ran) . ' database change(s) applied)' : '') . '.');
+        };
+        // Finish in a fresh PHP process so the NEW code runs it (fall back to this process).
+        $finishFresh = static function () use ($app, $finish, $out): void {
+            if (function_exists('passthru')) {
+                passthru(escapeshellarg(PHP_BINARY) . ' ' . escapeshellarg($app->path('bin/console')) . ' update:finish', $code);
+                // Trust the state file, not the exit code (an older version may not know "update:finish").
+                if (empty((new App\Services\Updater\Updater($app->path()))->installed()['pending_finish'])) {
+                    return;
+                }
+                $out('The new version did not finish by itself; finishing here.');
+            }
+            $finish();
+        };
+        try {
+            if ($command === 'update:finish') {
+                $finish();
+                break;
+            }
+            if ($command === 'update:rollback') {
+                $restored = $updater->rollback('console');
+                $out('Restored ' . ($restored['ref'] ?? 'the previous version') . '.');
+                $finishFresh();
+                break;
+            }
+            $source = App\Services\Updater\GitHubSource::fromConfig();
+            $installed = $updater->installed();
+            $release = $source->latestRelease();
+            $head = $source->branchHead();
+            $out('Installed:      ' . ($installed['ref'] ?? 'initial upload') . (isset($installed['sha']) ? ' (' . substr($installed['sha'], 0, 7) . ')' : ''));
+            $out('Latest release: ' . ($release ? $release['tag'] . ' (' . substr($release['sha'], 0, 7) . ')' : 'none'));
+            $out('Latest commit:  ' . $source->branch() . ' ' . substr($head['sha'], 0, 7) . ' ' . strtok($head['message'], "\n"));
+            if ($command === 'update') {
+                $out("\nInstall with: php bin/console update:install --release   (or --commit)");
+                break;
+            }
+            if ($problems = $updater->preflight()) {
+                $fail($problems[0]);
+            }
+            $useRelease = in_array('--release', $args, true);
+            if (!$useRelease && !in_array('--commit', $args, true)) {
+                $fail('Choose --release or --commit.');
+            }
+            $target = $useRelease ? $release : $head;
+            if ($target === null) {
+                $fail('No release has been published on GitHub yet.');
+            }
+            if (($installed['sha'] ?? null) === $target['sha']) {
+                $out('Already up to date.');
+                break;
+            }
+            $ref = $useRelease ? $release['tag'] : $source->branch() . '@' . substr($head['sha'], 0, 7);
+            $zip = $app->path('storage/updates/download-' . $target['sha'] . '.zip');
+            @mkdir(dirname($zip), 0770, true);
+            $out("Downloading {$ref}…");
+            $source->download($target['sha'], $zip);
+            try {
+                $updater->apply($zip, ['type' => $useRelease ? 'release' : 'commit', 'ref' => $ref, 'sha' => $target['sha'], 'by' => 'console']);
+            } finally {
+                @unlink($zip);
+            }
+            $out('Files replaced (backup saved in storage/updates/).');
+            $finishFresh();
+        } catch (App\Services\Updater\UpdateException $e) {
+            $fail($e->getMessage());
+        }
+        break;
+
     case 'queue:work':
         // Run from cron every minute: * * * * * php /path/bin/console queue:work
         [$sent, $failed] = (new App\Services\Mail\Mailer())->work((int) $opt('limit', '50'));
@@ -322,6 +404,9 @@ switch ($command) {
         $out('  queue:work [--limit=50]               Send queued emails (run from cron)');
         $out('  cache:clear                           Empty storage/cache');
         $out('  doctor                                Check the server is ready (PHP, .env, database, files, cron)');
+        $out('  update                                Show installed vs latest GitHub release/commit');
+        $out('  update:install --release|--commit     Install from GitHub (backup first, then migrations)');
+        $out('  update:rollback                       Restore the code from the latest backup');
         $out('  release                               Build a deployable zip in storage/release/');
         $out('  routes                                List routes');
 }

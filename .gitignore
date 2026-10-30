@@ -13,3 +13,5 @@
 /public/assets/build/*
 !/public/assets/build/.gitkeep
 /storage/release/
+/storage/updates/
+/storage/maintenance

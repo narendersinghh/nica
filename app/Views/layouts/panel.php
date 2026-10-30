@@ -18,6 +18,7 @@ if ($area === 'admin') {
         'redirects' => ['Redirects & 404s', '/admin/redirects/', 'external', 'seo'],
         'settings' => ['Settings', '/admin/settings/', 'gear', 'settings'],
         'audit' => ['Audit log', '/admin/audit/', 'shield', 'audit'],
+        'updates' => ['Updates', '/admin/updates/', 'download', 'updates'],
     ], static fn ($item) => $can($item[3]));
     $me = app()->auth()->user();
     $headName = trim(($me['first_name'] ?? '') . ' ' . ($me['last_name'] ?? '')) ?: ($me['display_name'] ?? $me['email']);

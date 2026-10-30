@@ -114,6 +114,7 @@ The full step-by-step guide for Hostinger (staging rehearsal, cut-over, one-comm
 ```bash
 php bin/console release   # zip to upload (no .env, no dump, no logs)
 php bin/console doctor    # on the server: checks PHP, .env, database, files and cron
+php bin/console update    # GitHub updates (also in Admin → Updates); update:install / update:rollback
 ```
 
 ### Speed and SEO reminders
