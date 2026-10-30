@@ -19,9 +19,14 @@ final class ErrorHandler
         ini_set('display_errors', '0');
         ini_set('log_errors', '0');
 
-        set_error_handler(static function (int $severity, string $message, string $file, int $line): bool {
+        set_error_handler(static function (int $severity, string $message, string $file, int $line) use ($app): bool {
             if (!(error_reporting() & $severity)) {
                 return false;
+            }
+            // Deprecations are warnings about future PHP versions: log them, never break a page over one.
+            if ($severity === E_DEPRECATED || $severity === E_USER_DEPRECATED) {
+                $app->logger()->warning('PHP deprecation: ' . $message, ['file' => $file . ':' . $line]);
+                return true;
             }
             throw new \ErrorException($message, 0, $severity, $file, $line);
         });

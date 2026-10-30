@@ -30,7 +30,8 @@ final class Database
                 PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
                 PDO::ATTR_EMULATE_PREPARES => false,
                 PDO::ATTR_STRINGIFY_FETCHES => false,
-                PDO::MYSQL_ATTR_MULTI_STATEMENTS => false,
+                // PHP 8.4 renamed the MySQL driver constants (the old names are deprecated in 8.5).
+                (defined('Pdo\\Mysql::ATTR_MULTI_STATEMENTS') ? constant('Pdo\\Mysql::ATTR_MULTI_STATEMENTS') : PDO::MYSQL_ATTR_MULTI_STATEMENTS) => false,
             ]);
             $this->pdo->exec("SET NAMES {$c['charset']} COLLATE {$c['collation']}, time_zone = '+00:00', "
                 . "sql_mode = 'STRICT_ALL_TABLES,NO_ZERO_DATE,NO_ZERO_IN_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION,ONLY_FULL_GROUP_BY'");
