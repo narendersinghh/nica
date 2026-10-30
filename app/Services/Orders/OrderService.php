@@ -252,7 +252,8 @@ final class OrderService
     public function cancelAbandoned(): int
     {
         $minutes = (int) Settings::get('commerce.stock_hold_minutes', 60);
-        $ids = array_column($this->db->select("SELECT id FROM orders WHERE status IN ('pending','failed') AND paid_at IS NULL AND created_at < (UTC_TIMESTAMP() - INTERVAL ? MINUTE)", [$minutes]), 'id');
+        // Only orders placed on this site: imported WordPress history keeps its original status.
+        $ids = array_column($this->db->select("SELECT id FROM orders WHERE status IN ('pending','failed') AND paid_at IS NULL AND legacy_wp_id IS NULL AND created_at < (UTC_TIMESTAMP() - INTERVAL ? MINUTE)", [$minutes]), 'id');
         foreach ($ids as $id) {
             $this->cancel((int) $id, 'Unpaid order cancelled after ' . $minutes . ' minutes.');
         }

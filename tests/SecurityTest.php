@@ -129,3 +129,13 @@ test('reset link on a never-verified account clears 2FA; sent emails keep no bod
         $dropUser($id);
     }
 });
+
+test('abandoned-order cleanup never touches imported WordPress orders', function () {
+    $db = app()->db();
+    $imported = $db->first("SELECT id, status FROM orders WHERE legacy_wp_id IS NOT NULL AND status IN ('pending','failed') LIMIT 1");
+    if ($imported === null) {
+        return;
+    }
+    (new OrderService($db))->cancelAbandoned();
+    assert_same($imported['status'], $db->scalar('SELECT status FROM orders WHERE id = ?', [$imported['id']]));
+});
